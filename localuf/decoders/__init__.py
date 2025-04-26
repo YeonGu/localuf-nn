@@ -21,3 +21,4 @@ from localuf.decoders.node_uf import NodeUF
 from localuf.decoders.node_buf import NodeBUF
 from localuf.decoders.luf import Macar, Actis
 from localuf.decoders.snowflake import Snowflake
+from localuf.decoders.nn import NN
