@@ -41,8 +41,9 @@ class NNCore:
 
         # After that, we build an APSP table for the graph,
         # and find the nearest boundary node for each internal node.
-        apsp_result = nx.floyd_warshall(self._g, weight="weight")
+        pred, apsp_result = nx.floyd_warshall_predecessor_and_distance(self._g, weight="weight")
         self._apsp: dict[Node, dict[Node, float]] = {a: dict(b) for a, b in apsp_result.items()}
+        self._pred: dict[Node, dict[Node, Node]] = {a: dict(b) for a, b in pred.items()}
 
         self._distance_to_boundary: dict[Node, float] = {}
         self._nearest_boundary: dict[Node, Node] = {}
@@ -130,13 +131,37 @@ class NNCore:
         if clusters is None:
             return
 
+        def shortest_path(uv: tuple[Node, Node]) -> set[Edge]:
+            u, v = uv
+            path = []
+            assert self._pred[u][v]
+            while u != v:
+                path.append((u, self._pred[u][v]))
+                u = self._pred[u][v]
+            return set(path)
+
         """ Correction should be stored in `self.correction`.
         Generate correction edges for each cluster.
+        1. For each cluster, choose pairs (u,v), each pair has a shortest path p_i.
+        2. For each cluster i, its match edges M_i are p_0 xor p_1 xor ... xor p_i.
+        3. The correction edges are M_0 xor M_1 xor ... xor M_i.
         """
         for cluster in clusters:
             assert len(cluster) % 2 == 0, f"Cluster {cluster} size should be even"
 
-        raise NotImplementedError
+            # Convert cluster to list for easier pairing
+            cluster_nodes = list(cluster)
+
+            # For each pair of nodes in the cluster, find the shortest path
+            cluster_correction: set[Edge] = set()
+            for i in range(0, len(cluster_nodes), 2):
+                u, v = cluster_nodes[i], cluster_nodes[i + 1]
+                # Find the shortest path between u and v
+                path: set[Edge] = shortest_path((u, v))
+                cluster_correction = cluster_correction.symmetric_difference(path)
+
+            # Add path edges to correction (using symmetric difference to handle XOR of edges)
+            self.correction = self.correction.symmetric_difference(cluster_correction)
 
     """ `io, bo, ie, be` stands for `internal / boundary odd / even cluster`.
     """
@@ -240,9 +265,12 @@ class NNCore:
         assert not io_clusters
         original_internal_nodes: set[Node] = {node for cluster in original for node in cluster}
         result_internal_nodes = [node for cluster in final_clusters for node in cluster]
-        assert len(result_internal_nodes) == len(set(result_internal_nodes)), "Duplicate nodes found between clusters"
+        assert len(result_internal_nodes) == len(
+            set(result_internal_nodes)
+        ), "Duplicate nodes found between clusters"
         assert original_internal_nodes == set(
-            result_internal_nodes), "Internal nodes in original and result clusters do not match"
+            result_internal_nodes
+        ), "Internal nodes in original and result clusters do not match"
 
         return final_clusters
 
