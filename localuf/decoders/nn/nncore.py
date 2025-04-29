@@ -1,11 +1,10 @@
 from typing import Any
-
 from matplotlib import pyplot as plt
-
 from localuf._base_classes import Code
 from localuf.type_aliases import Node, Edge
 import numpy as np
 import networkx as nx
+from .nngrow import grow_clusters  # Import the grow_clusters function
 
 
 class NNCore:
@@ -15,6 +14,7 @@ class NNCore:
         GROW = 1
         DYNAMIC_PEEL = 2
         NEAREST = 3
+        NEAREST_IMPROVED = 4
 
     def __init__(self, code: Code) -> None:
         self._code = code
@@ -123,6 +123,8 @@ class NNCore:
                 return self.dynamic_peel(original=fusion_res)
             case self.STRATEGY.NEAREST:
                 return self.nearest(original=fusion_res)
+            case self.STRATEGY.NEAREST_IMPROVED:
+                return self.nearest_improved(original=fusion_res)
             case _:
                 raise NotImplementedError
 
@@ -178,10 +180,10 @@ class NNCore:
         1. merge `io` cluster with its nearest `io` cluster.
         2. add a boundary node to `io` cluster.
         """
-        # Classify each cluster as internal/boundary and odd/even
+        # Classify each cluster as internal/boundary and odd/even. bo clusters will be
+        # turned into io/ie, so we don't need bo.
         io_clusters = []  # internal odd clusters
         ie_clusters = []  # internal even clusters
-        # bo_clusters = []  # boundary odd clusters
         be_clusters = []  # boundary even clusters
 
         for cluster in original:
@@ -274,9 +276,34 @@ class NNCore:
 
         return final_clusters
 
+    def nearest_improved(self, original: list[set[Node]]) -> list[set[Node]] | None:
+        """Nearest improved, just like nearest, but we now consider merging io clusters with ie/be ones as well.
+        While merging with ie clusters, an extra boundary node is added to the cluster.
+        While merging with be clusters, we just merge them and remove the boundary node.
+        """
+        raise NotImplementedError()
+
     def grow(self, original: list[set[Node]]) -> list[set[Node]] | None:
-        """Grow the clusters."""
-        raise NotImplementedError
+        """Growing take the concept from Union-Find decoders."""
+        if not original:
+            return None
+            
+        syndrome_nodes = {node for node, is_syndrome in self._syndrome_list.items() if is_syndrome}
+        
+        # Use the grow_clusters function from nngrow.py
+        final_clusters = grow_clusters(
+            g=self._g,
+            original_clusters=original,
+            syndrome=syndrome_nodes,
+            boundary_nodes=set(self._boundary_nodes)
+        )
+        
+        # Verify that all clusters have even parity
+        for cluster in final_clusters:
+            syndrome_count = sum(1 for node in cluster if node in syndrome_nodes)
+            assert syndrome_count % 2 == 0, f"Invalid cluster with odd syndrome count: {cluster}"
+        
+        return final_clusters
 
     def dynamic_peel(self, original: list[set[Node]]) -> list[set[Node]] | None:
         """Dynamic peel the clusters."""
