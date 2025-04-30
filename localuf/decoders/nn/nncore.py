@@ -287,22 +287,22 @@ class NNCore:
         """Growing take the concept from Union-Find decoders."""
         if not original:
             return None
-            
+
         syndrome_nodes = {node for node, is_syndrome in self._syndrome_list.items() if is_syndrome}
-        
+
         # Use the grow_clusters function from nngrow.py
-        final_clusters = grow_clusters(
+        final_clusters: list[set[tuple[int, ...]]] | None = grow_clusters(
             g=self._g,
             original_clusters=original,
             syndrome=syndrome_nodes,
             boundary_nodes=set(self._boundary_nodes)
         )
-        
+
         # Verify that all clusters have even parity
         for cluster in final_clusters:
             syndrome_count = sum(1 for node in cluster if node in syndrome_nodes)
             assert syndrome_count % 2 == 0, f"Invalid cluster with odd syndrome count: {cluster}"
-        
+
         return final_clusters
 
     def dynamic_peel(self, original: list[set[Node]]) -> list[set[Node]] | None:
